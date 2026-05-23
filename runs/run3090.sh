@@ -18,7 +18,7 @@ set -euo pipefail
 # 3) Example launch with wandb logging, but see below for setting up wandb first:
 # WANDB_RUN=run3090 screen -L -Logfile runs/run3090.log -S run3090 bash runs/run3090.sh
 # 4) Example launch for a quick smoke test before the full run:
-# MODEL_TAG=d8-test SKIP_TOKENIZER=1 NUM_ITERATIONS=100 SFT_NUM_ITERATIONS=100 TOTAL_BATCH_SIZE=65536 bash runs/run3090.sh
+# MODEL_TAG=d16-test SKIP_TOKENIZER=1 NUM_ITERATIONS=100 SFT_NUM_ITERATIONS=100 TOTAL_BATCH_SIZE=131072 bash runs/run3090.sh
 
 # Default intermediate artifacts directory is in ~/.cache/nanochat
 export OMP_NUM_THREADS=1
@@ -29,24 +29,24 @@ mkdir -p "$NANOCHAT_BASE_DIR"
 # 3090-sized knobs
 
 # 中文说明：这些参数是 3090 完整小模型训练的主要调节入口；OOM 时优先降低 DEVICE_BATCH_SIZE。
-MODEL_TAG="${MODEL_TAG:-d8-3090}"
-DEPTH="${DEPTH:-8}"
+MODEL_TAG="${MODEL_TAG:-d16-3090}"
+DEPTH="${DEPTH:-16}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
-DEVICE_BATCH_SIZE="${DEVICE_BATCH_SIZE:-128}"
-SFT_DEVICE_BATCH_SIZE="${SFT_DEVICE_BATCH_SIZE:-$DEVICE_BATCH_SIZE}"
+DEVICE_BATCH_SIZE="${DEVICE_BATCH_SIZE:-64}"
+SFT_DEVICE_BATCH_SIZE="${SFT_DEVICE_BATCH_SIZE:-32}"
 TOTAL_BATCH_SIZE="${TOTAL_BATCH_SIZE:-524288}"
 NUM_ITERATIONS="${NUM_ITERATIONS:--1}"
 TARGET_PARAM_DATA_RATIO="${TARGET_PARAM_DATA_RATIO:-8}"
-SFT_NUM_ITERATIONS="${SFT_NUM_ITERATIONS:-3000}"
+SFT_NUM_ITERATIONS="${SFT_NUM_ITERATIONS:-5000}"
 SFT_LOAD_OPTIMIZER="${SFT_LOAD_OPTIMIZER:-0}"
-SFT_EMBEDDING_LR="${SFT_EMBEDDING_LR:-0.03}"
-SFT_UNEMBEDDING_LR="${SFT_UNEMBEDDING_LR:-0.001}"
-SFT_MATRIX_LR="${SFT_MATRIX_LR:-0.002}"
+SFT_EMBEDDING_LR="${SFT_EMBEDDING_LR:-0.02}"
+SFT_UNEMBEDDING_LR="${SFT_UNEMBEDDING_LR:-0.0008}"
+SFT_MATRIX_LR="${SFT_MATRIX_LR:-0.0015}"
 EVAL_EVERY="${EVAL_EVERY:-100}"
 SAMPLE_EVERY="${SAMPLE_EVERY:-100}"
 EVAL_TOKENS="${EVAL_TOKENS:-524288}"
 TOKENIZER_SHARDS="${TOKENIZER_SHARDS:-8}"
-PRETRAIN_SHARDS="${PRETRAIN_SHARDS:-64}"
+PRETRAIN_SHARDS="${PRETRAIN_SHARDS:-128}"
 TOKENIZER_MAX_CHARS="${TOKENIZER_MAX_CHARS:-2000000000}"
 RUN_CHAT_EVAL="${RUN_CHAT_EVAL:-0}"
 SKIP_TOKENIZER="${SKIP_TOKENIZER:-0}"
@@ -132,8 +132,8 @@ if [ "${DATASET_DOWNLOAD_PID:-}" != "" ]; then
     wait "$DATASET_DOWNLOAD_PID"
 fi
 
-# d8 model by default: ~126M params, small enough for a single RTX 3090 and large enough
-# to produce more recognizable English chat behavior after a longer run.
+# d16 model by default: ~537M params, a larger 3090 profile that still follows
+# speedrun's large-batch, target-param-data-ratio training horizon.
 # 默认使用 target-param-data-ratio=8，让 base_train 像 speedrun 一样按模型参数量计算训练 token 数。
 python -m scripts.base_train \
     --depth="$DEPTH" \
@@ -185,10 +185,10 @@ if [ "$RUN_CHAT_EVAL" = "1" ]; then
 fi
 
 # chat with the model over CLI! Leave out the -p to chat interactively
-# python -m scripts.chat_cli -g d8-3090 -p "Hello, introduce yourself briefly."
+# python -m scripts.chat_cli -g d16-3090 -p "Hello, introduce yourself briefly."
 
 # even better, chat with your model over a pretty WebUI ChatGPT style
-# python -m scripts.chat_web -g d8-3090
+# python -m scripts.chat_web -g d16-3090
 
 # -----------------------------------------------------------------------------
 # Generate the full report by putting together all the sections
