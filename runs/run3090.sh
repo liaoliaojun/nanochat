@@ -18,7 +18,7 @@ set -euo pipefail
 # 3) Example launch with wandb logging, but see below for setting up wandb first:
 # WANDB_RUN=run3090 screen -L -Logfile runs/run3090.log -S run3090 bash runs/run3090.sh
 # 4) Example launch for a quick smoke test before the full run:
-# MODEL_TAG=d8-test SKIP_TOKENIZER=1 NUM_ITERATIONS=100 SFT_NUM_ITERATIONS=100 bash runs/run3090.sh
+# MODEL_TAG=d8-test SKIP_TOKENIZER=1 NUM_ITERATIONS=100 SFT_NUM_ITERATIONS=100 TOTAL_BATCH_SIZE=65536 bash runs/run3090.sh
 
 # Default intermediate artifacts directory is in ~/.cache/nanochat
 export OMP_NUM_THREADS=1
@@ -32,10 +32,11 @@ mkdir -p "$NANOCHAT_BASE_DIR"
 MODEL_TAG="${MODEL_TAG:-d8-3090}"
 DEPTH="${DEPTH:-8}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
-DEVICE_BATCH_SIZE="${DEVICE_BATCH_SIZE:-2}"
+DEVICE_BATCH_SIZE="${DEVICE_BATCH_SIZE:-128}"
 SFT_DEVICE_BATCH_SIZE="${SFT_DEVICE_BATCH_SIZE:-$DEVICE_BATCH_SIZE}"
-TOTAL_BATCH_SIZE="${TOTAL_BATCH_SIZE:-8192}"
-NUM_ITERATIONS="${NUM_ITERATIONS:-20000}"
+TOTAL_BATCH_SIZE="${TOTAL_BATCH_SIZE:-524288}"
+NUM_ITERATIONS="${NUM_ITERATIONS:--1}"
+TARGET_PARAM_DATA_RATIO="${TARGET_PARAM_DATA_RATIO:-8}"
 SFT_NUM_ITERATIONS="${SFT_NUM_ITERATIONS:-3000}"
 SFT_LOAD_OPTIMIZER="${SFT_LOAD_OPTIMIZER:-0}"
 SFT_EMBEDDING_LR="${SFT_EMBEDDING_LR:-0.03}"
@@ -57,6 +58,7 @@ echo "  MAX_SEQ_LEN=$MAX_SEQ_LEN"
 echo "  DEVICE_BATCH_SIZE=$DEVICE_BATCH_SIZE"
 echo "  TOTAL_BATCH_SIZE=$TOTAL_BATCH_SIZE"
 echo "  NUM_ITERATIONS=$NUM_ITERATIONS"
+echo "  TARGET_PARAM_DATA_RATIO=$TARGET_PARAM_DATA_RATIO"
 echo "  SFT_NUM_ITERATIONS=$SFT_NUM_ITERATIONS"
 echo "  SFT_LOAD_OPTIMIZER=$SFT_LOAD_OPTIMIZER"
 echo "  SFT_EMBEDDING_LR=$SFT_EMBEDDING_LR"
@@ -132,6 +134,7 @@ fi
 
 # d8 model by default: ~126M params, small enough for a single RTX 3090 and large enough
 # to produce more recognizable English chat behavior after a longer run.
+# 默认使用 target-param-data-ratio=8，让 base_train 像 speedrun 一样按模型参数量计算训练 token 数。
 python -m scripts.base_train \
     --depth="$DEPTH" \
     --head-dim=64 \
@@ -144,6 +147,7 @@ python -m scripts.base_train \
     --core-metric-every=-1 \
     --sample-every="$SAMPLE_EVERY" \
     --num-iterations="$NUM_ITERATIONS" \
+    --target-param-data-ratio="$TARGET_PARAM_DATA_RATIO" \
     --model-tag="$MODEL_TAG" \
     --run="$WANDB_RUN"
 # evaluate the model: BPB on train/val and a tiny CORE smoke test
