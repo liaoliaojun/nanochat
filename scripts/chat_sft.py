@@ -212,7 +212,10 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
         nonlocal cursor, epoch
         while len(conv_buffer) < buffer_size:
             conversation = dataset[cursor]
-            ids, mask = tokenizer.render_conversation(conversation)
+            # 中文说明：SFT 的一行最多只能容纳 row_capacity 个 token。
+            # 如果按默认 2048 渲染，max_seq_len=512 时长对话会永远放不进 buffer，
+            # 最终产生全 padding batch，cross_entropy(mean) 会出现 0/0 => NaN。
+            ids, mask = tokenizer.render_conversation(conversation, max_tokens=row_capacity)
             conv_buffer.append((ids, mask))
             cursor += ddp_world_size
             if cursor >= dataset_size:
@@ -302,7 +305,10 @@ def sft_data_generator_bos_bestfit(split, buffer_size=100):
             if content_len < row_capacity:
                 targets[i, content_len-1:] = -1
 
-        yield inputs, targets
+        # 中文说明：有些长用户问题在截断后可能还没进入 assistant 答案，
+        # 整个 batch 没有任何需要监督的 token。跳过这种 batch，避免 loss=NaN。
+        if (targets != -1).any():
+            yield inputs, targets
 
 train_loader = sft_data_generator_bos_bestfit("train")
 build_val_loader = lambda: sft_data_generator_bos_bestfit("val")
