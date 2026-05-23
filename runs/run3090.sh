@@ -1,13 +1,13 @@
 #!/bin/bash
 
-# This script is configured to train a tiny educational nanochat model
+# This script is configured to train a small educational nanochat model
 # (pretraining + finetuning) on a single RTX 3090 24GB GPU.
 # It keeps the same overall pipeline as speedrun.sh, but scales down the
 # model size, batch size, dataset size, and evaluation work.
 #
 # This is NOT expected to reach GPT-2 grade capability. Think of it as a
-# full-stack learning run that exercises tokenizer training, pretraining,
-# SFT, checkpointing, evaluation, and chat.
+# complete small-model run that exercises tokenizer training, pretraining,
+# SFT, checkpointing, evaluation, and chat on consumer hardware.
 
 set -euo pipefail
 
@@ -17,8 +17,8 @@ set -euo pipefail
 # screen -L -Logfile runs/run3090.log -S run3090 bash runs/run3090.sh
 # 3) Example launch with wandb logging, but see below for setting up wandb first:
 # WANDB_RUN=run3090 screen -L -Logfile runs/run3090.log -S run3090 bash runs/run3090.sh
-# 4) Example launch with a slightly larger/longer run:
-# DEPTH=8 DEVICE_BATCH_SIZE=2 NUM_ITERATIONS=3000 SFT_NUM_ITERATIONS=1000 bash runs/run3090.sh
+# 4) Example launch for a quick smoke test before the full run:
+# MODEL_TAG=d8-test SKIP_TOKENIZER=1 NUM_ITERATIONS=100 SFT_NUM_ITERATIONS=100 bash runs/run3090.sh
 
 # Default intermediate artifacts directory is in ~/.cache/nanochat
 export OMP_NUM_THREADS=1
@@ -28,15 +28,15 @@ mkdir -p "$NANOCHAT_BASE_DIR"
 # -----------------------------------------------------------------------------
 # 3090-sized knobs
 
-# 中文说明：这些参数是 3090 学习版的主要调节入口；OOM 时优先降低 DEVICE_BATCH_SIZE。
-MODEL_TAG="${MODEL_TAG:-d3090}"
-DEPTH="${DEPTH:-6}"
+# 中文说明：这些参数是 3090 完整小模型训练的主要调节入口；OOM 时优先降低 DEVICE_BATCH_SIZE。
+MODEL_TAG="${MODEL_TAG:-d8-3090}"
+DEPTH="${DEPTH:-8}"
 MAX_SEQ_LEN="${MAX_SEQ_LEN:-512}"
-DEVICE_BATCH_SIZE="${DEVICE_BATCH_SIZE:-4}"
+DEVICE_BATCH_SIZE="${DEVICE_BATCH_SIZE:-2}"
 SFT_DEVICE_BATCH_SIZE="${SFT_DEVICE_BATCH_SIZE:-$DEVICE_BATCH_SIZE}"
 TOTAL_BATCH_SIZE="${TOTAL_BATCH_SIZE:-8192}"
-NUM_ITERATIONS="${NUM_ITERATIONS:-1000}"
-SFT_NUM_ITERATIONS="${SFT_NUM_ITERATIONS:-500}"
+NUM_ITERATIONS="${NUM_ITERATIONS:-20000}"
+SFT_NUM_ITERATIONS="${SFT_NUM_ITERATIONS:-3000}"
 SFT_LOAD_OPTIMIZER="${SFT_LOAD_OPTIMIZER:-0}"
 SFT_EMBEDDING_LR="${SFT_EMBEDDING_LR:-0.03}"
 SFT_UNEMBEDDING_LR="${SFT_UNEMBEDDING_LR:-0.001}"
@@ -45,7 +45,7 @@ EVAL_EVERY="${EVAL_EVERY:-100}"
 SAMPLE_EVERY="${SAMPLE_EVERY:-100}"
 EVAL_TOKENS="${EVAL_TOKENS:-524288}"
 TOKENIZER_SHARDS="${TOKENIZER_SHARDS:-8}"
-PRETRAIN_SHARDS="${PRETRAIN_SHARDS:-16}"
+PRETRAIN_SHARDS="${PRETRAIN_SHARDS:-64}"
 TOKENIZER_MAX_CHARS="${TOKENIZER_MAX_CHARS:-2000000000}"
 RUN_CHAT_EVAL="${RUN_CHAT_EVAL:-0}"
 SKIP_TOKENIZER="${SKIP_TOKENIZER:-0}"
@@ -62,6 +62,9 @@ echo "  SFT_LOAD_OPTIMIZER=$SFT_LOAD_OPTIMIZER"
 echo "  SFT_EMBEDDING_LR=$SFT_EMBEDDING_LR"
 echo "  SFT_UNEMBEDDING_LR=$SFT_UNEMBEDDING_LR"
 echo "  SFT_MATRIX_LR=$SFT_MATRIX_LR"
+echo "  TOKENIZER_SHARDS=$TOKENIZER_SHARDS"
+echo "  PRETRAIN_SHARDS=$PRETRAIN_SHARDS"
+echo "  TOKENIZER_MAX_CHARS=$TOKENIZER_MAX_CHARS"
 echo "  SKIP_TOKENIZER=$SKIP_TOKENIZER"
 echo "  NANOCHAT_BASE_DIR=$NANOCHAT_BASE_DIR"
 
@@ -127,8 +130,8 @@ if [ "${DATASET_DOWNLOAD_PID:-}" != "" ]; then
     wait "$DATASET_DOWNLOAD_PID"
 fi
 
-# d6 model by default: tiny enough for a single RTX 3090, useful for learning the full loop.
-# Increase DEPTH/NUM_ITERATIONS later only after this script runs end-to-end.
+# d8 model by default: ~126M params, small enough for a single RTX 3090 and large enough
+# to produce more recognizable English chat behavior after a longer run.
 python -m scripts.base_train \
     --depth="$DEPTH" \
     --head-dim=64 \
@@ -178,10 +181,10 @@ if [ "$RUN_CHAT_EVAL" = "1" ]; then
 fi
 
 # chat with the model over CLI! Leave out the -p to chat interactively
-# python -m scripts.chat_cli -g d3090 -p "Why is the sky blue?"
+# python -m scripts.chat_cli -g d8-3090 -p "Hello, introduce yourself briefly."
 
 # even better, chat with your model over a pretty WebUI ChatGPT style
-# python -m scripts.chat_web -g d3090
+# python -m scripts.chat_web -g d8-3090
 
 # -----------------------------------------------------------------------------
 # Generate the full report by putting together all the sections
